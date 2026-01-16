@@ -1,0 +1,33 @@
+# Backup files
+*.backup
+*.bak
+*.orig
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Logs
+*.log
+*.log.gz
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Wine debug output
+/tmp/fl-*.log
