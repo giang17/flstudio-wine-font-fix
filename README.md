@@ -8,31 +8,35 @@
 
 ## 🎵 The Problem
 
-When running FL Studio under Wine, **flat symbols (♭)** appear as tofu boxes (□), while **sharp symbols (♯)** display correctly.
+When running FL Studio under Wine, **flat (♭) and sharp (♯) symbols** appear as tofu boxes (□) in the Piano Roll chord detection.
 
 | Before | After |
 |--------|-------|
 | ![Before](screenshots/before.png) | ![After](screenshots/after.png) |
-| `E add□9`, `A□`, `B□` | `E add♭9`, `A♭`, `B♭` |
+| `E□m`, `A□`, `G□m /D□` | `E♭m`, `A♭`, `G♯m /D♯` |
 
 ## 🔍 Root Cause
 
-After extensive debugging, we discovered:
+After extensive debugging with Wine's `+font` and `+dwrite` channels, we discovered:
+
+1. **Without Windows fonts**: Wine uses Cantarell (via fontconfig) which lacks both ♭ and ♯
+2. **With Segoe UI**: Has ♯ but NOT ♭
+3. **FL Studio uses low-level DirectWrite APIs** (`GetGlyphIndices`) that bypass font fallback
 
 | Font | ♭ Flat (U+266D) | ♯ Sharp (U+266F) |
 |------|-----------------|------------------|
-| **Segoe UI** | ❌ MISSING | ✅ Present |
+| Cantarell | ❌ Missing | ❌ Missing |
+| Segoe UI | ❌ Missing | ✅ Present |
 | Segoe UI Symbol | ✅ Present | ✅ Present |
+| **DejaVu Sans** | ✅ Present | ✅ Present |
 
-**Segoe UI contains the sharp symbol but NOT the flat symbol!**
+## ✅ Solutions
 
-Normally, Wine's font fallback would find the missing glyph in another font. However, FL Studio uses low-level DirectWrite APIs (`GetGlyphIndices`) that bypass font fallback entirely.
+We offer two solutions. **Solution 1 (Recommended)** is cleaner as it uses only open-source fonts.
 
-## ✅ The Solution
+### Solution 1: DejaVu Sans as Segoe UI (Recommended) 🌟
 
-This fix copies the missing glyphs from **Segoe UI Symbol** into **Segoe UI**, so FL Studio finds them directly.
-
-### Quick Install
+This solution uses **DejaVu Sans** (open-source, SIL License) renamed to "Segoe UI". No Microsoft fonts needed!
 
 ```bash
 # Clone the repo
@@ -40,82 +44,104 @@ git clone https://github.com/giang17/flstudio-wine-font-fix.git
 cd flstudio-wine-font-fix
 
 # Run the fix (uses default WINEPREFIX ~/.wine)
-./fix-flat-symbol.sh
+./fix-dejavu-as-segoeui.sh
 
 # Or specify a custom WINEPREFIX
-./fix-flat-symbol.sh /path/to/your/wineprefix
+./fix-dejavu-as-segoeui.sh /path/to/your/wineprefix
 ```
 
-### Requirements
+**Advantages:**
+- ✅ Uses open-source font (DejaVu Sans, SIL License)
+- ✅ No Microsoft font patching required
+- ✅ Works on fresh Wine installations
+- ✅ Both ♭ and ♯ symbols included natively
+
+### Solution 2: Patch Segoe UI (Original)
+
+If you already have Segoe UI installed and prefer to patch it:
+
+```bash
+./fix-flat-symbol.sh
+```
+
+This copies missing glyphs from Segoe UI Symbol into Segoe UI.
+
+## 📋 Requirements
 
 - Python 3
 - python3-fonttools
+- DejaVu Sans font (for Solution 1)
 
 ```bash
 # Ubuntu/Debian
-sudo apt install python3-fonttools
+sudo apt install python3-fonttools fonts-dejavu-core
 
 # Or via pip
 pip3 install fonttools
 ```
 
-### Manual Installation
-
-If you prefer to run the Python script directly:
-
-```bash
-python3 patch-segoeui.py ~/.wine
-```
-
 ## 🔄 Restore Original Font
 
-The script automatically creates a backup. To restore:
+Both scripts create automatic backups. To restore:
 
 ```bash
+# For Solution 1
+rm ~/.wine/drive_c/windows/Fonts/segoeui.ttf
+rm ~/.wine/drive_c/windows/Fonts/segoeuib.ttf
+
+# For Solution 2
 cp ~/.wine/drive_c/windows/Fonts/segoeui.ttf.backup \
    ~/.wine/drive_c/windows/Fonts/segoeui.ttf
 ```
-
-## 📋 What Gets Patched
-
-| Symbol | Unicode | Name |
-|--------|---------|------|
-| ♭ | U+266D | MUSIC FLAT SIGN |
-| ♮ | U+266E | MUSIC NATURAL SIGN |
-
-The sharp symbol (♯ U+266F) is already present in Segoe UI, so no patching is needed.
 
 ## 🔧 Technical Details
 
 ### Why Font Fallback Doesn't Work
 
-FL Studio uses these DirectWrite APIs:
-- ✅ `IDWriteFontFace::GetGlyphIndices` (direct glyph lookup)
-- ✅ `IDWriteFactory::CreateGlyphRunAnalysis` (direct rendering)
+We tested multiple approaches that do NOT work:
 
-FL Studio does **NOT** use:
+| Approach | Result | Reason |
+|----------|--------|--------|
+| Fontconfig aliases | ❌ | Wine DirectWrite doesn't use fontconfig for font matching |
+| Wine Registry FontSubstitutes | ❌ | DirectWrite bypasses GDI font substitution |
+| Wine dwrite.dll patch | ❌ | `GetGlyphIndices` can't do fallback (per Wine devs) |
+
+FL Studio uses these DirectWrite APIs:
+- `IDWriteFontFace::GetGlyphIndices` (direct glyph lookup)
+- `IDWriteFactory::CreateGlyphRunAnalysis` (direct rendering)
+
+FL Studio does **NOT** use APIs that trigger fallback:
 - ❌ `IDWriteTextLayout`
 - ❌ `IDWriteFontFallback::MapCharacters`
 
-Without calling `MapCharacters`, Wine's font fallback system is never triggered.
+**The only solution is to ensure the requested font contains the glyphs directly.**
+
+### Clean WINEPREFIX Test Results
+
+| WINEPREFIX Configuration | UI Font | ♭ Result | ♯ Result |
+|--------------------------|---------|----------|----------|
+| Clean (no fonts) | Cantarell | ❌ TOFU | ❌ TOFU |
+| With original Segoe UI | Segoe UI | ❌ TOFU | ✅ OK |
+| With patched Segoe UI | Segoe UI | ✅ OK | ✅ OK |
+| **DejaVu Sans as Segoe UI** | DejaVu Sans | ✅ OK | ✅ OK |
 
 ### Environment Tested
 
 - **Wine**: 11.0
 - **OS**: Ubuntu 24.04 LTS
 - **FL Studio**: 2025 (FL64.exe)
-- **Fonts**: Segoe UI, Segoe UI Symbol
 
 ## 🐛 Related
 
-- [Wine Bug #59252](https://bugs.winehq.org/show_bug.cgi?id=59252) - Original bug report
+- [Wine Bug #59252](https://bugs.winehq.org/show_bug.cgi?id=59252) - Original bug report with full analysis
 
 ## 📁 Files
 
 | File | Description |
 |------|-------------|
-| `fix-flat-symbol.sh` | All-in-one bash script |
-| `patch-segoeui.py` | Python patching script |
+| `fix-dejavu-as-segoeui.sh` | **Recommended** - Uses DejaVu Sans renamed to Segoe UI |
+| `fix-flat-symbol.sh` | Original - Patches Segoe UI with glyphs from Segoe UI Symbol |
+| `patch-segoeui.py` | Python patching script for Solution 2 |
 | `screenshots/` | Before/after screenshots |
 
 ## 🤝 Contributing
@@ -129,7 +155,7 @@ MIT License - See [LICENSE](LICENSE)
 ## 🙏 Acknowledgments
 
 - Wine developers for DirectWrite implementation
-- Nikolay Sivov for DirectWrite expertise
+- Nikolay Sivov for DirectWrite expertise and guidance
 - The Wine and FL Studio community
 
 ---
