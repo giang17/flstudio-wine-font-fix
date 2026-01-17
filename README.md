@@ -8,7 +8,7 @@
 
 ## 🎵 The Problem
 
-When running FL Studio under Wine, **flat (♭) and sharp (♯) symbols** appear as tofu boxes (□) in the Piano Roll chord detection.
+When running FL Studio under Wine, **flat (♭) and sharp (♯) symbols** appear as tofu boxes (□) in the Piano Roll chord detection. 
 
 | Before | After |
 |--------|-------|
@@ -76,7 +76,7 @@ rm ~/.wine/drive_c/windows/Fonts/segoeuib.ttf
 
 ### What Doesn't Work
 
-We tested these approaches - they do NOT work because DirectWrite bypasses them:
+We tested these approaches - they do NOT work because DirectWrite bypasses them: 
 
 - ❌ Fontconfig aliases
 - ❌ Wine Registry FontSubstitutes
@@ -101,17 +101,24 @@ We tested these approaches - they do NOT work because DirectWrite bypasses them:
 
 ## 🤝 Contributing
 
-Found another missing symbol? Have a fix for a different font? PRs welcome!
+Found another missing symbol? Have a fix for a different font? PRs welcome! 
 
 ## 📜 License
 
 MIT License - See [LICENSE](LICENSE)
+
+**Font Licensing:**
+- This tool uses **DejaVu Sans** (licensed under [SIL Open Font License](https://dejavu-fonts.github.io/License.html)) and renames it to "Segoe UI" for technical compatibility purposes.
+- "Segoe UI" is a trademark of Microsoft Corporation.
+- The renamed font files are created locally on your system for **personal use only**.
+- This project does not distribute any Microsoft fonts or modified font files.
 
 ## 🙏 Acknowledgments
 
 - Wine developers for DirectWrite implementation
 - Nikolay Sivov for DirectWrite expertise and guidance
 - The Wine and FL Studio community
+- DejaVu Fonts team for the excellent open-source font
 
 ---
 
