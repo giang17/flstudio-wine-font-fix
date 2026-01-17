@@ -4,7 +4,7 @@
 [![FL Studio](https://img.shields.io/badge/FL%20Studio-2025-FF6600)](https://www.image-line.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Fix missing musical symbols (♭ ♮ ♯) in FL Studio running under Wine**
+**Fix missing musical symbols (♭ ♯) in FL Studio running under Wine**
 
 ## 🎵 The Problem
 
@@ -13,30 +13,23 @@ When running FL Studio under Wine, **flat (♭) and sharp (♯) symbols** appear
 | Before | After |
 |--------|-------|
 | ![Before](screenshots/before.png) | ![After](screenshots/after.png) |
-| `E□m`, `A□`, `G□m /D□` | `E♭m`, `A♭`, `G♯m /D♯` |
+| `D□`, `G□`, `A□ add6` | `B♭`, `Gdim /B♭` |
 
 ## 🔍 Root Cause
 
-After extensive debugging with Wine's `+font` and `+dwrite` channels, we discovered:
-
-1. **Without Windows fonts**: Wine uses Cantarell (via fontconfig) which lacks both ♭ and ♯
-2. **With Segoe UI**: Has ♯ but NOT ♭
-3. **FL Studio uses low-level DirectWrite APIs** (`GetGlyphIndices`) that bypass font fallback
+FL Studio uses DirectWrite low-level APIs (`GetGlyphIndices`) that bypass Wine's font fallback mechanism. The default fallback font (Cantarell) lacks music symbols.
 
 | Font | ♭ Flat (U+266D) | ♯ Sharp (U+266F) |
 |------|-----------------|------------------|
-| Cantarell | ❌ Missing | ❌ Missing |
+| Cantarell (Wine default) | ❌ Missing | ❌ Missing |
 | Segoe UI | ❌ Missing | ✅ Present |
-| Segoe UI Symbol | ✅ Present | ✅ Present |
 | **DejaVu Sans** | ✅ Present | ✅ Present |
 
-## ✅ Solutions
+## ✅ The Solution
 
-We offer two solutions. **Solution 1 (Recommended)** is cleaner as it uses only open-source fonts.
+Use **DejaVu Sans** (open-source, SIL License) renamed to "Segoe UI". No Microsoft fonts needed!
 
-### Solution 1: DejaVu Sans as Segoe UI (Recommended) 🌟
-
-This solution uses **DejaVu Sans** (open-source, SIL License) renamed to "Segoe UI". No Microsoft fonts needed!
+### Quick Install
 
 ```bash
 # Clone the repo
@@ -50,27 +43,11 @@ cd flstudio-wine-font-fix
 ./fix-dejavu-as-segoeui.sh /path/to/your/wineprefix
 ```
 
-**Advantages:**
-- ✅ Uses open-source font (DejaVu Sans, SIL License)
-- ✅ No Microsoft font patching required
-- ✅ Works on fresh Wine installations
-- ✅ Both ♭ and ♯ symbols included natively
-
-### Solution 2: Patch Segoe UI (Original)
-
-If you already have Segoe UI installed and prefer to patch it:
-
-```bash
-./fix-flat-symbol.sh
-```
-
-This copies missing glyphs from Segoe UI Symbol into Segoe UI.
-
-## 📋 Requirements
+### Requirements
 
 - Python 3
 - python3-fonttools
-- DejaVu Sans font (for Solution 1)
+- DejaVu Sans font
 
 ```bash
 # Ubuntu/Debian
@@ -80,50 +57,30 @@ sudo apt install python3-fonttools fonts-dejavu-core
 pip3 install fonttools
 ```
 
-## 🔄 Restore Original Font
+## 🔄 Restore Original
 
-Both scripts create automatic backups. To restore:
+To remove the fix:
 
 ```bash
-# For Solution 1
 rm ~/.wine/drive_c/windows/Fonts/segoeui.ttf
 rm ~/.wine/drive_c/windows/Fonts/segoeuib.ttf
-
-# For Solution 2
-cp ~/.wine/drive_c/windows/Fonts/segoeui.ttf.backup \
-   ~/.wine/drive_c/windows/Fonts/segoeui.ttf
 ```
 
-## 🔧 Technical Details
+## 🔧 Why This Works
 
-### Why Font Fallback Doesn't Work
+1. FL Studio requests "Segoe UI" font via DirectWrite
+2. Wine finds `segoeui.ttf` in the WINEPREFIX Fonts folder
+3. The font's internal name is "Segoe UI" (renamed from DejaVu Sans)
+4. DejaVu Sans natively contains both ♭ and ♯ symbols
+5. Symbols render correctly!
 
-We tested multiple approaches that do NOT work:
+### What Doesn't Work
 
-| Approach | Result | Reason |
-|----------|--------|--------|
-| Fontconfig aliases | ❌ | Wine DirectWrite doesn't use fontconfig for font matching |
-| Wine Registry FontSubstitutes | ❌ | DirectWrite bypasses GDI font substitution |
-| Wine dwrite.dll patch | ❌ | `GetGlyphIndices` can't do fallback (per Wine devs) |
+We tested these approaches - they do NOT work because DirectWrite bypasses them:
 
-FL Studio uses these DirectWrite APIs:
-- `IDWriteFontFace::GetGlyphIndices` (direct glyph lookup)
-- `IDWriteFactory::CreateGlyphRunAnalysis` (direct rendering)
-
-FL Studio does **NOT** use APIs that trigger fallback:
-- ❌ `IDWriteTextLayout`
-- ❌ `IDWriteFontFallback::MapCharacters`
-
-**The only solution is to ensure the requested font contains the glyphs directly.**
-
-### Clean WINEPREFIX Test Results
-
-| WINEPREFIX Configuration | UI Font | ♭ Result | ♯ Result |
-|--------------------------|---------|----------|----------|
-| Clean (no fonts) | Cantarell | ❌ TOFU | ❌ TOFU |
-| With original Segoe UI | Segoe UI | ❌ TOFU | ✅ OK |
-| With patched Segoe UI | Segoe UI | ✅ OK | ✅ OK |
-| **DejaVu Sans as Segoe UI** | DejaVu Sans | ✅ OK | ✅ OK |
+- ❌ Fontconfig aliases
+- ❌ Wine Registry FontSubstitutes
+- ❌ Wine dwrite.dll patches (per Wine devs: `GetGlyphIndices` can't do fallback)
 
 ### Environment Tested
 
@@ -139,9 +96,7 @@ FL Studio does **NOT** use APIs that trigger fallback:
 
 | File | Description |
 |------|-------------|
-| `fix-dejavu-as-segoeui.sh` | **Recommended** - Uses DejaVu Sans renamed to Segoe UI |
-| `fix-flat-symbol.sh` | Original - Patches Segoe UI with glyphs from Segoe UI Symbol |
-| `patch-segoeui.py` | Python patching script for Solution 2 |
+| `fix-dejavu-as-segoeui.sh` | Automated fix script |
 | `screenshots/` | Before/after screenshots |
 
 ## 🤝 Contributing
@@ -160,4 +115,4 @@ MIT License - See [LICENSE](LICENSE)
 
 ---
 
-**Made with ♭♮♯ for the music production community**
+**Made with ♭♯ for the music production community**
