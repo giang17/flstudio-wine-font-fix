@@ -8,7 +8,7 @@
 
 ## 🎵 The Problem
 
-When running FL Studio under Wine, **flat (♭) and sharp (♯) symbols** appear as tofu boxes (□) in the Piano Roll chord detection. 
+When running FL Studio under Wine, **flat (♭) and sharp (♯) symbols** appear as tofu boxes (□) in the Piano Roll - chord progression. 
 
 | Before | After |
 |--------|-------|
