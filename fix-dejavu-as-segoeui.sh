@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # FL Studio Wine Font Fix - Clean Solution
-# Uses DejaVu Sans (open-source) renamed to "Segoe UI"
+# Places DejaVu Sans (open-source) as segoeui.ttf in the Wine prefix
 #
 # This fixes the missing music symbols (♭ ♯) in FL Studio's Piano Roll
 # chord detection when running under Wine.
@@ -9,7 +9,13 @@
 # DejaVu Sans is licensed under the Bitstream Vera / SIL Open Font License
 # and contains both flat (U+266D) and sharp (U+266F) symbols natively.
 #
-# Usage: ./fix-dejavu-as-segoeui.sh [WINEPREFIX]
+# FL Studio 2026 opens C:\windows\Fonts\segoeui.ttf by file name, so the
+# unmodified DejaVu Sans file is enough. FL Studio 2025 asked DirectWrite for
+# the family "Segoe UI"; --rename also renames the family to "Segoe UI" for it.
+# Renaming makes every application in the prefix that asks for "Segoe UI" get
+# DejaVu Sans.
+#
+# Usage: ./fix-dejavu-as-segoeui.sh [--rename] [WINEPREFIX]
 #        Default WINEPREFIX: ~/.wine
 #
 # Requirements: python3, python3-fonttools
@@ -34,13 +40,20 @@ echo -e "${BLUE}║  Fixes missing ♭ and ♯ symbols in Piano Roll chord displ
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
+# Parse arguments
+RENAME=0
+if [ "${1:-}" = "--rename" ]; then
+    RENAME=1
+    shift
+fi
+
 # Determine and validate WINEPREFIX
 WINEPREFIX="${1:-$HOME/.wine}"
 
 # Validate WINEPREFIX path (prevent injection attacks)
 if [[ ! "$WINEPREFIX" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
     echo -e "${RED}Error: Invalid WINEPREFIX path. Only alphanumeric, /, _, ., and - allowed.${NC}"
-    echo "Usage: $0 [WINEPREFIX]"
+    echo "Usage: $0 [--rename] [WINEPREFIX]"
     exit 1
 fi
 
@@ -53,9 +66,12 @@ fi
 
 if [ ! -d "$WINEPREFIX" ]; then
     echo -e "${RED}Error: WINEPREFIX not found: $WINEPREFIX${NC}"
-    echo "Usage: $0 [WINEPREFIX]"
+    echo "Usage: $0 [--rename] [WINEPREFIX]"
     exit 1
 fi
+
+# The Python steps below read the prefix from the environment
+export WINEPREFIX RENAME
 
 FONTS_DIR="$WINEPREFIX/drive_c/windows/Fonts"
 
@@ -146,13 +162,16 @@ if [ ! -d "$FONTS_DIR" ]; then
 fi
 
 # Backup existing fonts if present
-if [ -f "$FONTS_DIR/segoeui.ttf" ]; then
-    BACKUP="$FONTS_DIR/segoeui.ttf.backup.$(date +%Y%m%d_%H%M%S)"
-    echo -e "${YELLOW}Backing up existing segoeui.ttf to:${NC}"
-    echo "  $BACKUP"
-    cp "$FONTS_DIR/segoeui.ttf" "$BACKUP"
-    chmod 644 "$BACKUP"
-fi
+STAMP=$(date +%Y%m%d_%H%M%S)
+for f in segoeui.ttf segoeuib.ttf; do
+    if [ -f "$FONTS_DIR/$f" ]; then
+        BACKUP="$FONTS_DIR/$f.backup.$STAMP"
+        echo -e "${YELLOW}Backing up existing $f to:${NC}"
+        echo "  $BACKUP"
+        cp "$FONTS_DIR/$f" "$BACKUP"
+        chmod 644 "$BACKUP"
+    fi
+done
 
 # Copy DejaVu Sans to WINEPREFIX
 echo ""
@@ -165,10 +184,11 @@ if [ -n "$DEJAVU_BOLD_SRC" ]; then
     chmod 644 "$FONTS_DIR/segoeuib.ttf"
 fi
 
-# Rename font family using Python/fonttools
+# Rename font family using Python/fonttools (only with --rename)
+if [ "$RENAME" -eq 1 ]; then
 echo -e "${BLUE}Renaming font family to 'Segoe UI'...${NC}"
 
-python3 << 'PYTHON_SCRIPT'
+if ! python3 << 'PYTHON_SCRIPT'
 import sys
 import os
 from fontTools.ttLib import TTFont
@@ -204,13 +224,14 @@ def rename_font_family(font_path, new_family_name):
                 record.string = text.replace("DejaVuSans", new_family_name.replace(" ", ""))
                 changes += 1
 
-        font.save(font_path)
+        if changes > 0:
+            font.save(font_path)
         return changes
     except Exception as e:
         print(f"Error processing {font_path}: {e}", file=sys.stderr)
         return 0
 
-wineprefix = os.environ.get('WINEPREFIX', os.path.expanduser('~/.wine'))
+wineprefix = os.environ['WINEPREFIX']
 fonts_dir = os.path.join(wineprefix, 'drive_c/windows/Fonts')
 
 # Validate wineprefix exists
@@ -235,23 +256,24 @@ if os.path.exists(bold_path):
     if changes > 0:
         print(f"  segoeuib.ttf: {changes} name records updated")
 PYTHON_SCRIPT
-
-if [ $? -ne 0 ]; then
+then
     echo -e "${RED}Error: Font renaming failed${NC}"
     exit 1
+fi
 fi
 
 # Verify the result
 echo ""
 echo -e "${BLUE}Verifying installation...${NC}"
 
-python3 << 'VERIFY_SCRIPT'
+if python3 << 'VERIFY_SCRIPT'
 import os
 import sys
 from fontTools.ttLib import TTFont
 
-wineprefix = os.environ.get('WINEPREFIX', os.path.expanduser('~/.wine'))
+wineprefix = os.environ['WINEPREFIX']
 font_path = os.path.join(wineprefix, 'drive_c/windows/Fonts/segoeui.ttf')
+want_family = "Segoe UI" if os.environ.get('RENAME') == '1' else None
 
 if not os.path.exists(font_path):
     print(f"Error: Font file not found: {font_path}", file=sys.stderr)
@@ -278,7 +300,7 @@ try:
     print(f"  Flat symbol (♭):  {'✓ Present' if flat_ok else '✗ Missing'}")
     print(f"  Sharp symbol (♯): {'✓ Present' if sharp_ok else '✗ Missing'}")
 
-    if family_name == "Segoe UI" and flat_ok and sharp_ok:
+    if flat_ok and sharp_ok and (want_family is None or family_name == want_family):
         print("\n  Status: SUCCESS")
         sys.exit(0)
     else:
@@ -288,8 +310,7 @@ except Exception as e:
     print(f"Error verifying font: {e}", file=sys.stderr)
     sys.exit(1)
 VERIFY_SCRIPT
-
-if [ $? -eq 0 ]; then
+then
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║  ✓ Installation complete!                                      ║${NC}"
